@@ -236,4 +236,3 @@ Overall repayment behaviour should be assessed based on bounce regularisation, o
         "Download Observation",
         observation,
         file_name="soa_observation.txt"
-    )
