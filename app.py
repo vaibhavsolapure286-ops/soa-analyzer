@@ -193,13 +193,8 @@ Recovered In : {recovered_month}
 Recovered Amount : ₹{recovered_amount:,.0f}
 """
         )
-shortfall_summary = (
-    "\n".join(shortfall_analysis)
-    if shortfall_analysis
-    else "No Shortfall Observed"
-)
-    # Format debit > credit months with recovery info
-    debit_more_summary = ""
+shortfall_summary = (2    "\n".join(shortfall_analysis)3    
+                     if shortfall_analysis4    else "No Shortfall Observed"5)6 7# Format debit > credit months with recovery info8debit_more_summary = ""
     if debit_more_months:
         debit_more_summary = "\nMonths where Debit > Credit (Shortfall):\n"
         for item in debit_more_months:
