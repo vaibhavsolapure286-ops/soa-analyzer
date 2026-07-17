@@ -1,7 +1,6 @@
 import streamlit as st
 import pdfplumber
 import pandas as pd
-import openpyx1
 import re
 
 st.set_page_config(page_title="SOA Analyzer")
