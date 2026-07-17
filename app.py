@@ -1,5 +1,6 @@
 observation = f"""
 Customer Name : {customer_name}
+"""
 
 EMI Entries Found : {receipt_count}
 
