@@ -42,7 +42,6 @@ for receipt in receipts:
 
             late_emi_details.append(
                 f"""
-                
 EMI Due Date : {due_date.strftime('%d-%b-%Y')}
 Payment Date : {payment_date.strftime('%d-%b-%Y')}
 Delay : {dpd_days} Days ({dpd_months} Months)
