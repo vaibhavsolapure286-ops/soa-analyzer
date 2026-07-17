@@ -1,201 +1,126 @@
-text = ""
+import streamlit as st
+import pdfplumber
+import re
 
-with pdfplumber.open(pdf_file) as pdf:
-    for page in pdf.pages:
-        page_text = page.extract_text()
+st.title("SOA Analyzer")
 
-        if page_text:
-            text += page_text + "\n"
-
-dpd_df = pd.read_excel(excel_file)
-
-customer_match = re.search(
-    r'Ledger:\s*Mr\.\s*([^\n]+)',
-    text
+pdf_file = st.file_uploader(
+    "Upload SOA PDF",
+    type=["pdf"]
 )
 
-customer_name = "Not Found"
+if pdf_file:
 
-if customer_match:
-    customer_name = (
-        customer_match
-        .group(1)
-        .split("-")[0]
-        .strip()
+    text = ""
+
+    with pdfplumber.open(pdf_file) as pdf:
+        for page in pdf.pages:
+            page_text = page.extract_text()
+
+            if page_text:
+                text += page_text + "\n"
+
+    # ------------------------------
+    # CUSTOMER NAME
+    # ------------------------------
+
+    customer_name = "Not Found"
+
+    customer_match = re.search(
+        r'Ledger:\s*Mr[s]?\.\s*([^\n]+)',
+        text
     )
 
-match = dpd_df[
-    dpd_df.astype(str)
-    .apply(lambda x: x.str.contains(
-        customer_name,
-        case=False,
-        na=False
-    ))
-    .any(axis=1)
-]
-
-max_dpd = 0
-current_overdue = 0
-lan = "Not Available"
-
-if len(match) > 0:
-
-    if "Loan No" in match.columns:
-        lan = str(match.iloc[0]["Loan No"])
-
-    if "Max DPD" in match.columns:
-        max_dpd = match.iloc[0]["Max DPD"]
-
-    if "Current Overdue" in match.columns:
-        current_overdue = match.iloc[0]["Current Overdue"]
-
-emi_amount = None
-
-receipts = []
-partials = []
-bulk_payments = []
-bounces = []
-
-receipt_pattern = r'(\d{2}-[A-Za-z]{3}-\d{2}).*?Receipt.*?(\d+\.\d+)'
-
-for m in re.finditer(
-    receipt_pattern,
-    text
-):
-    receipts.append(
-        (
-            m.group(1),
-            float(m.group(2))
-        )
-    )
-
-if receipts:
-    emi_amount = receipts[0][1]
-
-for date, amt in receipts:
-
-    if emi_amount:
-
-        if amt < emi_amount:
-            partials.append(
-                f"{date} ₹{amt:,.0f}"
-            )
-
-        if amt >= (emi_amount * 2):
-            bulk_payments.append(
-                f"{date} ₹{amt:,.0f}"
-            )
-
-lines = text.split("\n")
-
-for i, line in enumerate(lines):
-
-    if (
-        "Bounced Return" in line
-        or "Bounce" in line
-    ):
-
-        date_match = re.search(
-            r'(\d{2}-[A-Za-z]{3}-\d{2})',
-            line
+    if customer_match:
+        customer_name = (
+            customer_match.group(1)
+            .split("-")[0]
+            .strip()
         )
 
-        amount_match = re.search(
-            r'(\d+\.\d+)',
-            line
-        )
+    # ------------------------------
+    # EMI RECEIPTS
+    # ------------------------------
 
-        bounce_date = (
-            date_match.group(1)
-            if date_match else ""
-        )
+    receipt_count = text.lower().count("receipt")
 
-        bounce_amt = (
-            amount_match.group(1)
-            if amount_match else ""
-        )
+    # ------------------------------
+    # BOUNCES
+    # ------------------------------
 
-        bounces.append(
-            (
-                bounce_date,
-                bounce_amt,
-                "Insufficient Funds"
-            )
-        )
-
-if current_overdue > 0:
-
-    dpd_status = (
-        "customer has not cleared the delinquency and overdue is still outstanding"
+    bounce_count = (
+        text.lower().count("bounced return")
     )
 
-else:
+    # ------------------------------
+    # BOUNCE CHARGES
+    # ------------------------------
 
-    dpd_status = (
-        "customer has cleared the delinquency and account is presently regular"
+    bounce_charge_count = (
+        text.lower().count("emi bouncing charges")
     )
 
-if len(bounces) == 0 and current_overdue == 0:
+    # ------------------------------
+    # PARTIAL PAYMENT
+    # ------------------------------
 
-    behaviour = "Regular"
+    partial_payment_count = 0
 
-elif len(bounces) <= 2 and current_overdue == 0:
+    if "Pending" in text:
+        partial_payment_count += 1
 
-    behaviour = "Average"
+    # ------------------------------
+    # CURRENT POS
+    # ------------------------------
 
-else:
-
-    behaviour = "Irregular"
-
-if len(bounces) > 0:
-
-    reason = (
-        "insufficient funds and irregular cash flow"
+    pos_match = re.findall(
+        r'(\d+\.\d+)\s*Dr',
+        text
     )
 
-elif current_overdue > 0:
+    current_pos = "Not Found"
 
-    reason = (
-        "customer has not regularized overdue obligations"
+    if pos_match:
+        current_pos = pos_match[-1]
+
+    # ------------------------------
+    # OVERDUE
+    # ------------------------------
+
+    current_overdue = "Check Bounce Recovery"
+
+    # ------------------------------
+    # FINAL OBSERVATION
+    # ------------------------------
+
+    observation = f"""
+Customer Name: {customer_name}
+
+EMI Payments Observed: {receipt_count}
+
+Bounce Count: {bounce_count}
+
+Bounce Charge Entries: {bounce_charge_count}
+
+Partial Payment Count: {partial_payment_count}
+
+Current POS: ₹{current_pos}
+
+Current Overdue: {current_overdue}
+
+Final Observation:
+
+Customer repayment behaviour reviewed as per available SOA; EMI payment entries observed are {receipt_count}; total bounce count observed is {bounce_count}; bounce charge entries observed are {bounce_charge_count}; partial payment count observed is {partial_payment_count}; current POS is ₹{current_pos}; current overdue requires verification against bounce recovery entries; overall repayment behaviour should be assessed based on bounce regularisation, overdue clearance status and payment continuity.
+"""
+
+    st.text_area(
+        "SOA Analysis",
+        observation,
+        height=400
     )
 
-else:
-
-    reason = (
-        "no delinquency observed"
+    st.download_button(
+        "Download Observation",
+        observation,
+        file_name="soa_observation.txt"
     )
-
-credit_summary = (
-    f"EMI of ₹{emi_amount:,.0f} received on "
-    + ", ".join(
-        [x[0] for x in receipts]
-    )
-    if emi_amount
-    else "payments observed"
-)
-
-partial_summary = (
-    ", ".join(partials)
-    if partials
-    else "no partial payment observed"
-)
-
-bulk_summary = (
-    ", ".join(bulk_payments)
-    if bulk_payments
-    else "no bulk payment observed"
-)
-
-bounce_summary = (
-    "; ".join(
-        [
-            f"{d} for ₹{float(a):,.0f} due to {r}"
-            for d, a, r in bounces
-            if a
-        ]
-    )
-    if bounces
-    else "no bounce observed"
-)
-
-final_observation = f"""
