@@ -150,7 +150,54 @@ if pdf_file:
                 "credit": data["credit"],
                 "excess": excess
             })
-    
+shortfall_analysis = []
+
+for month in sorted(monthly_debit.keys()):
+
+    debit = monthly_debit.get(month, 0)
+    credit = monthly_credit.get(month, 0)
+
+    if debit > credit:
+
+        shortfall = debit - credit
+
+        recovered_month = "Not Recovered"
+        recovered_amount = 0
+
+        months_list = sorted(monthly_credit.keys())
+
+        current_index = months_list.index(month) if month in months_list else -1
+
+        if current_index >= 0:
+
+            for next_month in months_list[current_index + 1:]:
+
+                next_credit = monthly_credit.get(next_month, 0)
+                next_debit = monthly_debit.get(next_month, 0)
+
+                excess = max(0, next_credit - next_debit)
+
+                if excess > 0:
+
+                    recovered_month = next_month
+                    recovered_amount = min(shortfall, excess)
+                    break
+
+        shortfall_analysis.append(
+            f"""
+Month : {month}
+Debit Amount : ₹{debit:,.0f}
+Credit Amount : ₹{credit:,.0f}
+Shortfall Amount : ₹{shortfall:,.0f}
+Recovered In : {recovered_month}
+Recovered Amount : ₹{recovered_amount:,.0f}
+"""
+        )
+shortfall_summary = (
+    "\n".join(shortfall_analysis)
+    if shortfall_analysis
+    else "No Shortfall Observed"
+)
     # Format debit > credit months with recovery info
     debit_more_summary = ""
     if debit_more_months:
