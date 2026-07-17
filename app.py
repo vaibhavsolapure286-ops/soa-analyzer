@@ -1,15 +1,17 @@
-import streamlit as st
-import pdfplumber
+prompt = f"""
 
-st.title("SOA Analyzer")
+Credits:
+{credits}
 
-pdf = st.file_uploader("Upload SOA PDF", type="pdf")
+Bounces:
+{bounces}
 
-if pdf:
-    text = ""
+Overdue:
+{overdue}
 
-    with pdfplumber.open(pdf) as p:
-        for page in p.pages:
-            text += page.extract_text()
+Max DPD:
+{dpd}
 
-    st.text_area("Extracted Text", text, height=300)
+Generate a lending assessment.
+
+"""
