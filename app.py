@@ -6,51 +6,50 @@ Review the Statement of Account (SOA) and provide repayment observations.
 2. Mention delayed, missed, or irregular EMI payments.
 
 3. Identify partial payments:
-   - Date
-   - Month
-   - Amount Paid
-   - Pending Amount
+- Date
+- Month
+- Amount Paid
+- Pending Amount
 
 4. Identify bulk payments:
-   - Date
-   - Month
-   - Amount
-   - Number of EMIs covered
+- Date
+- Month
+- Amount
+- Number of EMIs covered
 
 5. Identify all Cheque/ECS/NACH bounces:
-   - Bounce Date
-   - Bounce Month
-   - Bounce Amount
-   - Bounce Reason
-   - Bounce Charges Applied
+- Bounce Date
+- Bounce Month
+- Bounce Amount
+- Bounce Reason
+- Bounce Charges Applied
 
 6. For every bounced EMI:
-   - Check whether it was subsequently cleared
-   - Recovery Date
-   - Recovery Month
-   - Recovery Amount
-   - DPD in Days
-   - DPD in Months
+- Check whether it was subsequently cleared
+- Recovery Date
+- Recovery Month
+- Recovery Amount
+- DPD in Days
+- DPD in Months
 
 7. Calculate:
-   - Total Bounce Count
-   - Cleared Bounce Count
-   - Pending Bounce Count
+- Total Bounce Count
+- Cleared Bounce Count
+- Pending Bounce Count
 
 8. Current Status:
-   - Current POS
-   - Current Overdue Amount
-   - Current DPD in Days
-   - Current DPD in Months
-   - Maximum DPD in Days
-   - Maximum DPD in Months
+- Current POS
+- Current Overdue Amount
+- Current DPD in Days
+- Current DPD in Months
+- Maximum DPD in Days
+- Maximum DPD in Months
 
 9. Month-wise Debit vs Credit Analysis
 
 A. Identify months where Debit Amount is greater than Credit Amount.
 
 For each month provide:
-
 - Month
 - Total Debit Amount
 - Total Credit Amount
@@ -59,7 +58,6 @@ For each month provide:
 B. Verify whether the shortfall amount was recovered later.
 
 Mention:
-
 - Recovery Month
 - Recovery Amount
 - Whether Fully Recovered or Partially Recovered
@@ -67,21 +65,18 @@ Mention:
 C. Identify months where Credit Amount is greater than Debit Amount.
 
 For each month provide:
-
 - Month
 - Total Debit Amount
 - Total Credit Amount
 - Excess Credit Amount
 
 D. Mention:
-
 - Total months where Debit exceeded Credit
 - Total months where Credit exceeded Debit
 - Total Shortfall Amount
 - Total Shortfall Recovered
 
 10. Check for:
-
 - Bounce Charges
 - Penalty Charges
 - Overdue Charges
@@ -89,7 +84,6 @@ D. Mention:
 - Late Payment Charges
 
 11. Check for negative remarks:
-
 - Default
 - Settlement
 - Write-Off
