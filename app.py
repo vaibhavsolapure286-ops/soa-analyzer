@@ -1,86 +1,126 @@
-prompt = f"""
-Review the Statement of Account (SOA) and provide repayment observations.
+import streamlit as st
+import pdfplumber
+import re
 
-SOA Data:
+st.title("SOA Analyzer")
 
-Credits:
-{credits}
+pdf_file = st.file_uploader(
+    "Upload SOA PDF",
+    type=["pdf"]
+)
 
-Bounces:
-{bounces}
+if pdf_file:
 
-Current Overdue:
-{overdue}
+    text = ""
 
-Maximum DPD:
-{dpd}
+    with pdfplumber.open(pdf_file) as pdf:
+        for page in pdf.pages:
+            page_text = page.extract_text()
 
-Please verify and report:
+            if page_text:
+                text += page_text + "\n"
 
-1. Whether EMI payments were paid regularly and on time.
-2. Any delayed, missed, or irregular EMI payments.
-3. Any partial payment made by the customer:
-   - Date
-   - Month
-   - Amount Paid
-   - Pending Amount
+    # ------------------------------
+    # CUSTOMER NAME
+    # ------------------------------
 
-4. Any bulk payment made by the customer:
-   - Date
-   - Month
-   - Amount
+    customer_name = "Not Found"
 
-5. Any Cheque/ECS/NACH bounce:
-   - Bounce Date
-   - Bounce Month
-   - Bounce Amount
-   - Bounce Reason
-   - Bounce Charges Applied
+    customer_match = re.search(
+        r'Ledger:\s*Mr[s]?\.\s*([^\n]+)',
+        text
+    )
 
-6. Whether the bounced EMI was subsequently cleared:
-   - Recovery Date
-   - Recovery Month
-   - Recovery Amount
-   - DPD Days
-   - DPD Months
+    if customer_match:
+        customer_name = (
+            customer_match.group(1)
+            .split("-")[0]
+            .strip()
+        )
 
-7. Calculate:
-   - Total Bounce Count
-   - Cleared Bounce Count
-   - Pending Bounce Count
+    # ------------------------------
+    # EMI RECEIPTS
+    # ------------------------------
 
-8. Verify:
-   - Current Overdue Amount
-   - Whether customer has cleared overdue or not
+    receipt_count = text.lower().count("receipt")
 
-9. Calculate:
-   - Current DPD in Days
-   - Current DPD in Months
-   - Maximum DPD in Days
-   - Maximum DPD in Months
+    # ------------------------------
+    # BOUNCES
+    # ------------------------------
 
-10. Convert DPD into months:
-    Example:
-    147 Days = 4.9 Months
+    bounce_count = (
+        text.lower().count("bounced return")
+    )
 
-11. Check for:
-   - Bounce Charges
-   - Penalty Charges
-   - Late Payment Charges
-   - Overdue Charges
-   - Penal Interest
+    # ------------------------------
+    # BOUNCE CHARGES
+    # ------------------------------
 
-12. Check for negative remarks:
-   - Default
-   - Settlement
-   - Write-Off
-   - Legal Action
-   - Recovery Proceedings
-   - Repossession
+    bounce_charge_count = (
+        text.lower().count("emi bouncing charges")
+    )
 
-13. Mention Current POS / Closing Outstanding Balance.
+    # ------------------------------
+    # PARTIAL PAYMENT
+    # ------------------------------
 
-Generate the final output in ONE SENTENCE ONLY in the following format:
+    partial_payment_count = 0
 
-Customer paid EMI of ₹[EMI Amount] from [First EMI Month-Year] to [Last EMI Month-Year]; total bounce count observed is [Bounce Count]; bounce observed on [Bounce Date] ([Bounce Month]) for ₹[Bounce Amount] due to [Bounce Reason]; bounce was regularized on [Recovery Date] through payment of ₹[Recovery Amount] with DPD of [DPD Days] days ([DPD Months] months); cleared bounce count is [Cleared Bounce Count] and pending bounce count is [Pending Bounce Count]; partial payment count observed is [Partial Payment Count]; bulk payment count observed is [Bulk Payment Count]; current POS is ₹[POS Amount]; current overdue amount is ₹[Overdue Amount]; current DPD is [Current DPD Days] days ([Current DPD Months] months); maximum DPD observed is [Maximum DPD Days] days ([Maximum DPD Months] months); penalty/bounce charge entries observed are [Penalty Count]; no/adverse remarks observed; customer has cleared/not cleared all delinquent dues; probable reason for delinquency appears [Reason]; overall repayment behaviour is assessed as Regular/Average/Irregular.
+    if "Pending" in text:
+        partial_payment_count += 1
+
+    # ------------------------------
+    # CURRENT POS
+    # ------------------------------
+
+    pos_match = re.findall(
+        r'(\d+\.\d+)\s*Dr',
+        text
+    )
+
+    current_pos = "Not Found"
+
+    if pos_match:
+        current_pos = pos_match[-1]
+
+    # ------------------------------
+    # OVERDUE
+    # ------------------------------
+
+    current_overdue = "Check Bounce Recovery"
+
+    # ------------------------------
+    # FINAL OBSERVATION
+    # ------------------------------
+
+    observation = f"""
+Customer Name: {customer_name}
+
+EMI Payments Observed: {receipt_count}
+
+Bounce Count: {bounce_count}
+
+Bounce Charge Entries: {bounce_charge_count}
+
+Partial Payment Count: {partial_payment_count}
+
+Current POS: ₹{current_pos}
+
+Current Overdue: {current_overdue}
+
+Final Observation:
+
+Customer repayment behaviour reviewed as per available SOA; EMI payment entries observed are {receipt_count}; total bounce count observed is {bounce_count}; bounce charge entries observed are {bounce_charge_count}; partial payment count observed is {partial_payment_count}; current POS is ₹{current_pos}; current overdue requires verification against bounce recovery entries; overall repayment behaviour should be assessed based on bounce regularisation, overdue clearance status and payment continuity.
 """
+
+    st.text_area(
+        "SOA Analysis",
+        observation,
+        height=400
+    )
+
+    st.download_button(
+        "Download Observation",
+        observation,
+        file_name="soa_observation.txt"
+    )
