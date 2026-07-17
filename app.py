@@ -1,332 +1,149 @@
-import streamlit as st
-import pdfplumber
-import re
-from datetime import datetime
+SOA Review Summary# ----------------------------
+# NEGATIVE REMARKS CHECK
+# ----------------------------
 
-st.set_page_config(page_title="SOA Analyzer")
+negative_keywords = [
+    "default",
+    "settlement",
+    "write off",
+    "write-off",
+    "legal",
+    "recovery",
+    "repossession",
+    "sarfaesi",
+    "auction"
+]
 
-st.title("SOA Analyzer")
+negative_remarks = []
 
-pdf_file = st.file_uploader(
-    "Upload SOA PDF",
-    type=["pdf"]
-)
+for keyword in negative_keywords:
+    if keyword.lower() in text.lower():
+        negative_remarks.append(keyword)
 
-if pdf_file:
+# ----------------------------
+# EMI PAYMENT STATUS
+# ----------------------------
 
-    text = ""
-
-    with pdfplumber.open(pdf_file) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-
-            if page_text:
-                text += page_text + "\n"
-
-    # ---------------------------------
-    # Customer Name
-    # ---------------------------------
-
-    customer_name = "Not Found"
-
-    customer_match = re.search(
-        r'Ledger:\s*Mr\.\s*([^\n]+)',
-        text
+if partial_payments:
+    emi_status = (
+        f"{len(partial_payments)} partial payment(s) observed"
+    )
+else:
+    emi_status = (
+        "all EMI payments appear fully paid as per available SOA"
     )
 
-    if customer_match:
-        customer_name = (
-            customer_match
-            .group(1)
-            .split("-")[0]
-            .strip()
-        )
+# ----------------------------
+# OVERDUE STATUS
+# ----------------------------
 
-    # ---------------------------------
-    # Receipts
-    # ---------------------------------
+if current_overdue > 0:
 
-    receipt_pattern = r'(\d{2}-[A-Za-z]{3}-\d{2}).*?Receipt.*?(\d+\.\d+)'
-
-    receipts = []
-
-    for m in re.finditer(
-        receipt_pattern,
-        text
-    ):
-        receipts.append(
-            (
-                m.group(1),
-                float(m.group(2))
-            )
-        )
-
-    emi_amount = None
-
-    if receipts:
-        emi_amount = receipts[0][1]
-
-    # ---------------------------------
-    # Partial Payments
-    # ---------------------------------
-
-    partial_payments = []
-
-    if emi_amount:
-
-        for date, amount in receipts:
-
-            if amount < emi_amount:
-
-                partial_payments.append(
-                    (date, amount)
-                )
-
-    # ---------------------------------
-    # Bulk Payments
-    # ---------------------------------
-
-    bulk_payments = []
-
-    if emi_amount:
-
-        for date, amount in receipts:
-
-            if amount >= (emi_amount * 2):
-
-                bulk_payments.append(
-                    (date, amount)
-                )
-
-    # ---------------------------------
-    # Bounce Detection
-    # ---------------------------------
-
-    bounce_details = []
-
-    lines = text.split("\n")
-
-    for line in lines:
-
-        if (
-            "Bounced Return" in line
-            or "Bounce" in line
-            or "insufficient fund" in line.lower()
-        ):
-
-            date_match = re.search(
-                r'(\d{2}-[A-Za-z]{3}-\d{2})',
-                line
-            )
-
-            amount_match = re.search(
-                r'(\d+\.\d+)',
-                line
-            )
-
-            if date_match:
-
-                bounce_date = date_match.group(1)
-
-                bounce_amount = (
-                    float(amount_match.group(1))
-                    if amount_match
-                    else emi_amount
-                )
-
-                bounce_details.append(
-                    {
-                        "date": bounce_date,
-                        "amount": bounce_amount
-                    }
-                )
-
-    # ---------------------------------
-    # Bounce Recovery Logic
-    # ---------------------------------
-
-    cleared_bounce_count = 0
-    pending_bounce_count = 0
-
-    bounce_summary = []
-
-    for bounce in bounce_details:
-
-        bounce_date = datetime.strptime(
-            bounce["date"],
-            "%d-%b-%y"
-        )
-
-        recovery_found = False
-
-        for receipt_date, receipt_amt in receipts:
-
-            r_date = datetime.strptime(
-                receipt_date,
-                "%d-%b-%y"
-            )
-
-            if r_date > bounce_date:
-
-                recovery_found = True
-
-                cleared_bounce_count += 1
-
-                bounce_summary.append(
-                    f"Bounce of ₹{bounce['amount']:,.0f} on {bounce['date']} cleared on {receipt_date} by payment of ₹{receipt_amt:,.0f}"
-                )
-
-                break
-
-        if not recovery_found:
-
-            pending_bounce_count += 1
-
-            bounce_summary.append(
-                f"Bounce of ₹{bounce['amount']:,.0f} on {bounce['date']} remains uncleared"
-            )
-
-    # ---------------------------------
-    # Current Overdue
-    # ---------------------------------
-
-    current_overdue = 0
-
-    for bounce in bounce_details:
-
-        bounce_date = datetime.strptime(
-            bounce["date"],
-            "%d-%b-%y"
-        )
-
-        recovered = False
-
-        for receipt_date, receipt_amt in receipts:
-
-            r_date = datetime.strptime(
-                receipt_date,
-                "%d-%b-%y"
-            )
-
-            if r_date > bounce_date:
-
-                recovered = True
-                break
-
-        if not recovered:
-
-            current_overdue += (
-                bounce["amount"]
-                if bounce["amount"]
-                else 0
-            )
-
-    # ---------------------------------
-    # Estimated DPD
-    # ---------------------------------
-
-    current_dpd_days = 0
-
-    if bounce_details:
-
-        last_pending_date = None
-
-        for bounce in bounce_details:
-
-            bounce_date = datetime.strptime(
-                bounce["date"],
-                "%d-%b-%y"
-            )
-
-            recovered = False
-
-            for receipt_date, _ in receipts:
-
-                r_date = datetime.strptime(
-                    receipt_date,
-                    "%d-%b-%y"
-                )
-
-                if r_date > bounce_date:
-
-                    recovered = True
-                    break
-
-            if not recovered:
-                last_pending_date = bounce_date
-
-        if last_pending_date:
-
-            current_dpd_days = (
-                datetime.today()
-                - last_pending_date
-            ).days
-
-    current_dpd_months = round(
-        current_dpd_days / 30,
-        1
+    overdue_status = (
+        f"outstanding overdue amount of ₹{current_overdue:,.0f} remains unpaid"
     )
 
-    # ---------------------------------
-    # Behaviour
-    # ---------------------------------
+else:
 
-    if (
-        len(bounce_details) == 0
-        and current_overdue == 0
-    ):
+    overdue_status = (
+        "no overdue amount is outstanding"
+    )
 
-        behaviour = "Regular"
+# ----------------------------
+# DPD STATUS
+# ----------------------------
 
-    elif (
-        len(bounce_details) > 0
-        and current_overdue == 0
-    ):
+if current_dpd_days > 0:
 
-        behaviour = "Irregular with historical bounce instances"
+    dpd_status = (
+        f"current DPD estimated at {current_dpd_days} days ({current_dpd_months} months)"
+    )
 
-    else:
+else:
 
-        behaviour = "Irregular"
+    dpd_status = (
+        "no current DPD observed"
+    )
 
-    # ---------------------------------
-    # Final Observation
-    # ---------------------------------
+# ----------------------------
+# BOUNCE STATUS
+# ----------------------------
 
-    bounce_count = len(bounce_details)
+if bounce_count > 0:
 
-    if current_overdue > 0:
+    bounce_status = (
+        f"total bounce count {bounce_count}, cleared bounce count {cleared_bounce_count} and pending bounce count {pending_bounce_count}"
+    )
 
-        status = (
-            "customer has not cleared the delinquency"
-        )
+else:
 
-    else:
+    bounce_status = (
+        "no cheque, ECS or NACH bounce observed"
+    )
 
-        status = (
-            "customer has cleared the delinquency"
-        )
+# ----------------------------
+# NEGATIVE REMARK STATUS
+# ----------------------------
 
-    final_observation = f"""
+if negative_remarks:
+
+    negative_status = (
+        "negative remarks observed: "
+        + ", ".join(negative_remarks)
+    )
+
+else:
+
+    negative_status = (
+        "no negative remarks such as default, settlement, write-off, legal action or recovery proceedings observed"
+    )
+
+# ----------------------------
+# FINAL OBSERVATION
+# ----------------------------
+
+final_observation = f"""
+SOA Review Summary:
+
 Customer Name: {customer_name}
 
-Total Bounce Count: {bounce_count}
+EMI Review:
+{emi_status}
 
-Cleared Bounce Count: {cleared_bounce_count}
+Bounce Review:
+{bounce_status}
 
-Pending Bounce Count: {pending_bounce_count}
+Overdue Review:
+{overdue_status}
 
-Current Overdue Amount: ₹{current_overdue:,.0f}
+DPD Review:
+{dpd_status}
 
-Estimated Current DPD: {current_dpd_days} days ({current_dpd_months} months)
+Negative Remarks:
+{negative_status}
 
-Final Observation:
+Overall Repayment Behaviour:
 
-Customer paid EMI of ₹{emi_amount:,.0f} regularly; total bounce count observed is {bounce_count}; {'; '.join(bounce_summary) if bounce_summary else 'no bounce observed'}; partial payment count observed is {len(partial_payments)}; bulk payment count observed is {len(bulk_payments)}; current overdue amount is ₹{current_overdue:,.0f}; estimated current DPD is {current_dpd_days} days ({current_dpd_months} months); {status}; repayment behaviour is {behaviour}.
+Customer repayment record reviewed based on the available SOA; {emi_status}; {bounce_status}; {overdue_status}; {dpd_status}; {negative_status}; overall repayment behaviour assessed as {behaviour}.
 """
 
-    st.text_area(
-        "Analysis Result",
-        final_observation,
-        height=450
-    )
+Customer Name: Paras Rathore
+
+EMI Review:
+All EMI payments appear fully paid as per available SOA.
+
+Bounce Review:
+Total bounce count 4, cleared bounce count 3 and pending bounce count 1.
+
+Overdue Review:
+No overdue amount is outstanding.
+
+DPD Review:
+No current DPD observed.
+
+Negative Remarks:
+No negative remarks such as default, settlement, write-off, legal action or recovery proceedings observed.
+
+Overall Repayment Behaviour:
+
+Customer repayment record reviewed based on the available SOA; all EMI payments appear fully paid as per available SOA; total bounce count 4, cleared bounce count 3 and pending bounce count 1; no overdue amount is outstanding; no current DPD observed; no negative remarks such as default, settlement, write-off, legal action or recovery proceedings observed; overall repayment behaviour assessed as Irregular with historical bounce instances.
