@@ -1,9 +1,9 @@
 import streamlit as st
 import pdfplumber
 
-st.set_page_config(page_title="SOA Credit Analyzer")
+st.set_page_config(page_title="SOA Review Analyzer")
 
-st.title("SOA Credit Analyzer")
+st.title("SOA Review Analyzer")
 
 pdf_file = st.file_uploader(
     "Upload SOA PDF",
@@ -21,109 +21,96 @@ if pdf_file:
             if page_text:
                 text += page_text + "\n"
 
-    st.subheader("SOA Review Prompt")
+    prompt = f"""
+Review the Statement of Account (SOA) and provide repayment observations.
 
-    review_prompt = f"""
-You are a Credit Risk Analyst.
+Check:
 
-Review the following Statement of Account (SOA) and provide a detailed repayment behaviour assessment.
-
-Rules:
-
-1. Verify whether EMI payments were paid regularly.
-2. Identify all EMI payment dates and amounts.
-3. Check for any missed EMI.
-4. Check for any delayed EMI.
-5. Check for any partial EMI payment and mention:
+1. Whether EMI payments were paid regularly and on time.
+2. Mention delayed or missed EMI payments.
+3. Check for partial payments:
    - Date
    - Month
    - Amount
-6. Check for any bulk EMI payment and mention:
+   - Pending Amount
+
+4. Check for bulk payments:
    - Date
    - Month
    - Amount
-7. Check for cheque, ECS or NACH bounce entries.
-8. For every bounce mention:
+
+5. Check all Cheque / ECS / NACH bounces:
    - Bounce Date
    - Bounce Month
    - Bounce Amount
    - Bounce Reason
-9. Verify whether the bounced EMI was subsequently cleared.
-10. If cleared, mention:
-    - Recovery Date
-    - Recovery Month
-    - Recovery Amount
-    - DPD Days
-    - DPD Months
-11. Count:
-    - Total Bounce Count
-    - Cleared Bounce Count
-    - Pending Bounce Count
-12. Verify bounce charges, late payment charges, penalty charges, overdue charges and penal interest.
-13. Mention all charges with:
-    - Date
-    - Amount
-14. Calculate:
-    - Current Overdue Amount
-    - Current DPD in Days
-    - Current DPD in Months
-    - Maximum DPD in Days
-    - Maximum DPD in Months
-15. If DPD Days = 147 then show:
-    Maximum DPD = 147 Days (4.9 Months)
-16. Verify whether the customer has completely cleared all delinquent dues.
-17. If customer has not cleared dues:
-    - Mention pending amount
-    - Mention probable reason
-18. Check for negative remarks:
-    - Default
-    - Settlement
-    - Write-Off
-    - Legal Action
-    - Recovery Proceedings
-    - SARFAESI
-    - Repossession
-19. Mention whether any negative remark exists.
-20. Assess repayment behaviour:
-    - Regular
-    - Average
-    - Irregular
+   - Bounce Charges
 
-Give output in exactly this format:
+6. If bounce is cleared:
+   - Recovery Date
+   - Recovery Month
+   - Recovery Amount
+   - DPD Days
+   - DPD Months
 
-Customer Name:
+7. Calculate:
+   - Total Bounce Count
+   - Cleared Bounce Count
+   - Pending Bounce Count
 
-EMI Amount:
+8. Check overdue:
+   - Current Overdue Amount
+   - Whether customer cleared it
 
-EMI Review:
+9. Calculate:
+   - Current DPD Days
+   - Current DPD Months
+   - Maximum DPD Days
+   - Maximum DPD Months
 
-Bounce Review:
+10. Convert DPD:
+Example:
+147 days = 4.9 months
 
-Partial Payment Review:
+11. Check:
+   - Bounce Charges
+   - Penal Charges
+   - Late Payment Charges
+   - Overdue Charges
 
-Bulk Payment Review:
+12. Check:
+   - Default
+   - Settlement
+   - Write-Off
+   - Recovery Proceedings
+   - Legal Action
+   - Repossession
 
-Penalty Charges Review:
+13. Mention Current POS from SOA.
 
-Current Overdue:
+Provide final observation in ONE SENTENCE ONLY.
 
-Current DPD:
+Format:
 
-Maximum DPD:
+Customer paid EMI of ₹X from Month-Year to Month-Year; total bounce count observed is X; bounce observed on DD-MMM-YYYY (Month-Year) for ₹X due to X reason; bounce was cleared on DD-MMM-YYYY through payment of ₹X with DPD of X days (X months); cleared bounce count is X and pending bounce count is X; partial payment count observed is X; bulk payment count observed is X; current POS is ₹X; current overdue amount is ₹X; current DPD is X days (X months); maximum DPD observed is X days (X months); penalty/bounce charge entries observed are X; no/adverse remarks observed; customer has cleared/not cleared delinquent dues; overall repayment behaviour is Regular/Average/Irregular.
 
-Negative Remarks:
-
-Final Observation:
-
-Customer paid EMI of ₹X from Month-Year to Month-Year; total bounce count observed is X; bounce observed on DD-MMM-YYYY (Month-Year) for ₹X due to insufficient funds; bounce was regularized on DD-MMM-YYYY through payment of ₹X with DPD of X days (X months); cleared bounce count is X and pending bounce count is X; partial payment count observed is X; bulk payment count observed is X; current overdue amount is ₹X; current DPD is X days (X months); maximum DPD observed is X days (X months); penalty charge entries observed are X; no/negative remarks observed; customer has cleared/not cleared all delinquent dues; probable reason for delinquency appears X; overall repayment behaviour is assessed as Regular/Average/Irregular.
-
-SOA DATA:
+SOA:
 
 {text}
 """
 
+    st.subheader("SOA Extracted")
+
     st.text_area(
-        "Copy this prompt into AI",
-        review_prompt,
+        "SOA Text",
+        text,
+        height=300
+    )
+
+    st.subheader("Copy Below Prompt Into AI")
+
+    st.text_area(
+        "Analysis Prompt",
+        prompt,
         height=600
     )
