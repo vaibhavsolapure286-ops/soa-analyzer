@@ -3,9 +3,9 @@ import pdfplumber
 import re
 from datetime import datetime
 
-st.set_page_config(page_title="SOA Analyzer")
+st.set_page_config(page_title="SOA Review Analyzer")
 
-st.title("SOA Analyzer")
+st.title("SOA Review Analyzer")
 
 pdf_file = st.file_uploader(
     "Upload SOA PDF",
@@ -23,28 +23,23 @@ if pdf_file:
             if page_text:
                 text += page_text + "\n"
 
-    # ---------------------------------
-    # Customer Name
-    # ---------------------------------
+    # -------------------------
+    # CUSTOMER NAME
+    # -------------------------
 
     customer_name = "Not Found"
 
-    customer_match = re.search(
+    match = re.search(
         r'Ledger:\s*Mr\.\s*([^\n]+)',
         text
     )
 
-    if customer_match:
-        customer_name = (
-            customer_match
-            .group(1)
-            .split("-")[0]
-            .strip()
-        )
+    if match:
+        customer_name = match.group(1).split("-")[0].strip()
 
-    # ---------------------------------
-    # Receipts
-    # ---------------------------------
+    # -------------------------
+    # PAYMENTS
+    # -------------------------
 
     receipt_pattern = r'(\d{2}-[A-Za-z]{3}-\d{2}).*?Receipt.*?(\d+\.\d+)'
 
@@ -61,52 +56,19 @@ if pdf_file:
             )
         )
 
-    emi_amount = None
+    emi_amount = 0
 
     if receipts:
         emi_amount = receipts[0][1]
 
-    # ---------------------------------
-    # Partial Payments
-    # ---------------------------------
+    # -------------------------
+    # BOUNCES
+    # -------------------------
 
-    partial_payments = []
+    bounce_dates = []
+    bounce_amounts = []
 
-    if emi_amount:
-
-        for date, amount in receipts:
-
-            if amount < emi_amount:
-
-                partial_payments.append(
-                    (date, amount)
-                )
-
-    # ---------------------------------
-    # Bulk Payments
-    # ---------------------------------
-
-    bulk_payments = []
-
-    if emi_amount:
-
-        for date, amount in receipts:
-
-            if amount >= (emi_amount * 2):
-
-                bulk_payments.append(
-                    (date, amount)
-                )
-
-    # ---------------------------------
-    # Bounce Detection
-    # ---------------------------------
-
-    bounce_details = []
-
-    lines = text.split("\n")
-
-    for line in lines:
+    for line in text.split("\n"):
 
         if (
             "Bounced Return" in line
@@ -119,83 +81,43 @@ if pdf_file:
                 line
             )
 
-            amount_match = re.search(
+            amt_match = re.search(
                 r'(\d+\.\d+)',
                 line
             )
 
             if date_match:
 
-                bounce_date = date_match.group(1)
-
-                bounce_amount = (
-                    float(amount_match.group(1))
-                    if amount_match
-                    else emi_amount
+                bounce_dates.append(
+                    date_match.group(1)
                 )
 
-                bounce_details.append(
-                    {
-                        "date": bounce_date,
-                        "amount": bounce_amount
-                    }
-                )
+                if amt_match:
+                    bounce_amounts.append(
+                        float(
+                            amt_match.group(1)
+                        )
+                    )
+                else:
+                    bounce_amounts.append(
+                        emi_amount
+                    )
 
-    # ---------------------------------
-    # Bounce Recovery Logic
-    # ---------------------------------
+    total_bounces = len(bounce_dates)
 
-    cleared_bounce_count = 0
-    pending_bounce_count = 0
+    # -------------------------
+    # BOUNCE RECOVERY
+    # -------------------------
+
+    cleared = 0
+    pending = 0
 
     bounce_summary = []
 
-    for bounce in bounce_details:
+    for i in range(len(bounce_dates)):
 
         bounce_date = datetime.strptime(
-            bounce["date"],
-            "%d-%b-%y"
-        )
-
-        recovery_found = False
-
-        for receipt_date, receipt_amt in receipts:
-
-            r_date = datetime.strptime(
-                receipt_date,
-                "%d-%b-%y"
-            )
-
-            if r_date > bounce_date:
-
-                recovery_found = True
-
-                cleared_bounce_count += 1
-
-                bounce_summary.append(
-                    f"Bounce of ₹{bounce['amount']:,.0f} on {bounce['date']} cleared on {receipt_date} by payment of ₹{receipt_amt:,.0f}"
-                )
-
-                break
-
-        if not recovery_found:
-
-            pending_bounce_count += 1
-
-            bounce_summary.append(
-                f"Bounce of ₹{bounce['amount']:,.0f} on {bounce['date']} remains uncleared"
-            )
-
-    # ---------------------------------
-    # Current Overdue
-    # ---------------------------------
-
-    current_overdue = 0
-
-    for bounce in bounce_details:
-
-        bounce_date = datetime.strptime(
-            bounce["date"],
+            bounce_dates[i],
             "%d-%b-%y"
         )
 
@@ -203,85 +125,133 @@ if pdf_file:
 
         for receipt_date, receipt_amt in receipts:
 
-            r_date = datetime.strptime(
+            payment_date = datetime.strptime(
                 receipt_date,
                 "%d-%b-%y"
             )
 
-            if r_date > bounce_date:
+            if payment_date > bounce_date:
 
                 recovered = True
+                cleared += 1
+
+                bounce_summary.append(
+                    f"Bounce on {bounce_dates[i]} cleared on {receipt_date} by payment of ₹{receipt_amt:,.0f}"
+                )
+
                 break
 
         if not recovered:
 
-            current_overdue += (
-                bounce["amount"]
-                if bounce["amount"]
-                else 0
+            pending += 1
+
+            bounce_summary.append(
+                f"Bounce on {bounce_dates[i]} remains uncleared"
             )
 
-    # ---------------------------------
-    # Estimated DPD
-    # ---------------------------------
+    # -------------------------
+    # PARTIAL PAYMENT
+    # -------------------------
+
+    partial_count = 0
+
+    for _, amt in receipts:
+
+        if emi_amount > 0 and amt < emi_amount:
+            partial_count += 1
+
+    # -------------------------
+    # BULK PAYMENT
+    # -------------------------
+
+    bulk_count = 0
+
+    for _, amt in receipts:
+
+        if emi_amount > 0 and amt >= emi_amount * 2:
+            bulk_count += 1
+
+    # -------------------------
+    # PENALTY CHARGES
+    # -------------------------
+
+    penalty_count = 0
+
+    penalty_keywords = [
+        "bounce charges",
+        "emi bouncing charges",
+        "late payment charges",
+        "penalty charges",
+        "penal interest",
+        "overdue charges"
+    ]
+
+    for line in text.split("\n"):
+
+        for k in penalty_keywords:
+
+            if k.lower() in line.lower():
+                penalty_count += 1
+
+    # -------------------------
+    # NEGATIVE REMARKS
+    # -------------------------
+
+    negative_hits = []
+
+    negative_words = [
+        "default",
+        "settlement",
+        "write off",
+        "write-off",
+        "legal",
+        "recovery",
+        "repossession"
+    ]
+
+    for word in negative_words:
+
+        if word.lower() in text.lower():
+            negative_hits.append(word)
+
+    # -------------------------
+    # OVERDUE
+    # -------------------------
+
+    current_overdue = pending * emi_amount
+
+    # -------------------------
+    # DPD
+    # -------------------------
 
     current_dpd_days = 0
 
-    if bounce_details:
+    if pending > 0:
 
-        last_pending_date = None
+        oldest_pending = datetime.strptime(
+            bounce_dates[-1],
+            "%d-%b-%y"
+        )
 
-        for bounce in bounce_details:
-
-            bounce_date = datetime.strptime(
-                bounce["date"],
-                "%d-%b-%y"
-            )
-
-            recovered = False
-
-            for receipt_date, _ in receipts:
-
-                r_date = datetime.strptime(
-                    receipt_date,
-                    "%d-%b-%y"
-                )
-
-                if r_date > bounce_date:
-
-                    recovered = True
-                    break
-
-            if not recovered:
-                last_pending_date = bounce_date
-
-        if last_pending_date:
-
-            current_dpd_days = (
-                datetime.today()
-                - last_pending_date
-            ).days
+        current_dpd_days = (
+            datetime.today()
+            - oldest_pending
+        ).days
 
     current_dpd_months = round(
         current_dpd_days / 30,
         1
     )
 
-    # ---------------------------------
-    # Behaviour
-    # ---------------------------------
+    # -------------------------
+    # BEHAVIOUR
+    # -------------------------
 
-    if (
-        len(bounce_details) == 0
-        and current_overdue == 0
-    ):
+    if total_bounces == 0:
 
         behaviour = "Regular"
 
-    elif (
-        len(bounce_details) > 0
-        and current_overdue == 0
-    ):
+    elif pending == 0:
 
         behaviour = "Irregular with historical bounce instances"
 
@@ -289,44 +259,44 @@ if pdf_file:
 
         behaviour = "Irregular"
 
-    # ---------------------------------
-    # Final Observation
-    # ---------------------------------
+    # -------------------------
+    # FINAL OBSERVATION
+    # -------------------------
 
-    bounce_count = len(bounce_details)
-
-    if current_overdue > 0:
-
-        status = (
-            "customer has not cleared the delinquency"
-        )
-
-    else:
-
-        status = (
-            "customer has cleared the delinquency"
-        )
-
-    final_observation = f"""
+    final_text = f"""
 Customer Name: {customer_name}
 
-Total Bounce Count: {bounce_count}
+EMI Amount: ₹{emi_amount:,.0f}
 
-Cleared Bounce Count: {cleared_bounce_count}
+Total Bounce Count: {total_bounces}
 
-Pending Bounce Count: {pending_bounce_count}
+Cleared Bounce Count: {cleared}
 
-Current Overdue Amount: ₹{current_overdue:,.0f}
+Pending Bounce Count: {pending}
+
+Partial Payment Count: {partial_count}
+
+Bulk Payment Count: {bulk_count}
+
+Penalty Charge Entries: {penalty_count}
+
+Current Overdue: ₹{current_overdue:,.0f}
 
 Estimated Current DPD: {current_dpd_days} days ({current_dpd_months} months)
 
-Final Observation:
+Negative Remarks:
+{', '.join(negative_hits) if negative_hits else 'None'}
 
-Customer paid EMI of ₹{emi_amount:,.0f} regularly; total bounce count observed is {bounce_count}; {'; '.join(bounce_summary) if bounce_summary else 'no bounce observed'}; partial payment count observed is {len(partial_payments)}; bulk payment count observed is {len(bulk_payments)}; current overdue amount is ₹{current_overdue:,.0f}; estimated current DPD is {current_dpd_days} days ({current_dpd_months} months); {status}; repayment behaviour is {behaviour}.
+Bounce Summary:
+{' | '.join(bounce_summary) if bounce_summary else 'No bounce observed'}
+
+FINAL OBSERVATION:
+
+Customer repayment behaviour reviewed as per available SOA; EMI amount observed is ₹{emi_amount:,.0f}; total bounce count is {total_bounces}, cleared bounce count is {cleared} and pending bounce count is {pending}; partial payment count observed is {partial_count}; bulk payment count observed is {bulk_count}; penalty charge entries observed are {penalty_count}; current overdue amount is ₹{current_overdue:,.0f}; estimated current DPD is {current_dpd_days} days ({current_dpd_months} months); {'negative remarks observed: ' + ', '.join(negative_hits) if negative_hits else 'no negative remarks observed'}; overall repayment behaviour is assessed as {behaviour}.
 """
 
     st.text_area(
-        "Analysis Result",
-        final_observation,
-        height=450
+        "SOA Analysis",
+        final_text,
+        height=500
     )
