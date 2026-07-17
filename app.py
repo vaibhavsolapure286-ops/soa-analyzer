@@ -2,7 +2,9 @@ prompt = f"""
 Review the Statement of Account (SOA) and provide repayment observations.
 
 1. Verify whether EMI payments were paid regularly and on time.
+
 2. Mention delayed, missed, or irregular EMI payments.
+
 3. Identify partial payments:
    - Date
    - Month
@@ -43,60 +45,58 @@ Review the Statement of Account (SOA) and provide repayment observations.
    - Maximum DPD in Days
    - Maximum DPD in Months
 
-9. Month-wise Debit vs Credit Analysis:
+9. Month-wise Debit vs Credit Analysis
 
-   A. Identify month(s) where:
+A. Identify months where Debit Amount is greater than Credit Amount.
 
-      Debit Amount > Credit Amount
+For each month provide:
 
-      For each month provide:
+- Month
+- Total Debit Amount
+- Total Credit Amount
+- Shortfall Amount
 
-      - Month
-      - Total Debit Amount
-      - Total Credit Amount
-      - Shortfall Amount
+B. Verify whether the shortfall amount was recovered later.
 
-   B. Verify whether the shortfall amount was recovered later.
+Mention:
 
-      Mention:
+- Recovery Month
+- Recovery Amount
+- Whether Fully Recovered or Partially Recovered
 
-      - Recovery Month
-      - Recovery Amount
-      - Whether Fully Recovered or Partially Recovered
+C. Identify months where Credit Amount is greater than Debit Amount.
 
-   C. Identify month(s) where:
+For each month provide:
 
-      Credit Amount > Debit Amount
+- Month
+- Total Debit Amount
+- Total Credit Amount
+- Excess Credit Amount
 
-      For each month provide:
+D. Mention:
 
-      - Month
-      - Total Debit Amount
-      - Total Credit Amount
-      - Excess Credit Amount
-
-   D. Mention:
-
-      - Total months where Debit exceeded Credit
-      - Total months where Credit exceeded Debit
-      - Total Shortfall Amount
-      - Total Shortfall Recovered
+- Total months where Debit exceeded Credit
+- Total months where Credit exceeded Debit
+- Total Shortfall Amount
+- Total Shortfall Recovered
 
 10. Check for:
-    - Bounce Charges
-    - Penalty Charges
-    - Overdue Charges
-    - Penal Interest
-    - Late Payment Charges
+
+- Bounce Charges
+- Penalty Charges
+- Overdue Charges
+- Penal Interest
+- Late Payment Charges
 
 11. Check for negative remarks:
-    - Default
-    - Settlement
-    - Write-Off
-    - Legal Action
-    - Recovery Proceedings
-    - SARFAESI
-    - Repossession
+
+- Default
+- Settlement
+- Write-Off
+- Legal Action
+- Recovery Proceedings
+- SARFAESI
+- Repossession
 
 Output Format:
 
