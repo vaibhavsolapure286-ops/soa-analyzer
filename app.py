@@ -1,22 +1,43 @@
+import streamlit as st
+import pdfplumber
+import pandas as pd
+import re
+
+st.set_page_config(page_title="SOA Analyzer")
+
+st.title("SOA + DPD Analyzer")
+
+pdf_file = st.file_uploader(
+    "Upload SOA PDF",
+    type=["pdf"]
+)
+
+excel_file = st.file_uploader(
+    "Upload DPD Excel",
+    type=["xlsx"]
+)
+
 if pdf_file and excel_file:
 
+    # Read PDF
     text = ""
 
     with pdfplumber.open(pdf_file) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text()
-
             if page_text:
                 text += page_text + "\n"
 
-    dpd_df = pd.read_excel(excel_file)
+    # Read Excel
+    df = pd.read_excel(excel_file)
+
+    # Customer Name
+    customer_name = "Not Found"
 
     customer_match = re.search(
         r'Ledger:\s*Mr\.\s*([^\n]+)',
         text
     )
-
-    customer_name = "Not Found"
 
     if customer_match:
         customer_name = (
@@ -26,106 +47,64 @@ if pdf_file and excel_file:
             .strip()
         )
 
-    match = dpd_df[
-        dpd_df.astype(str)
-        .apply(lambda x: x.str.contains(
-            customer_name,
-            case=False,
-            na=False
-        ))
+    # Match Excel using Customer Name
+
+    match = df[
+        df.astype(str)
+        .apply(
+            lambda x: x.str.contains(
+                customer_name,
+                case=False,
+                na=False
+            )
+        )
         .any(axis=1)
     ]
 
     max_dpd = 0
-    current_overdue = 0
-    lan = "Not Available"
+    overdue = 0
+    loan_no = ""
 
     if len(match) > 0:
 
         if "Loan No" in match.columns:
-            lan = str(match.iloc[0]["Loan No"])
+            loan_no = str(match.iloc[0]["Loan No"])
 
         if "Max DPD" in match.columns:
             max_dpd = match.iloc[0]["Max DPD"]
 
         if "Current Overdue" in match.columns:
-            current_overdue = match.iloc[0]["Current Overdue"]
+            overdue = match.iloc[0]["Current Overdue"]
 
-    emi_amount = None
+    # Bounce Detection
 
-    receipts = []
-    partials = []
-    bulk_payments = []
-    bounces = []
+    bounce_lines = []
 
-    receipt_pattern = r'(\d{2}-[A-Za-z]{3}-\d{2}).*?Receipt.*?(\d+\.\d+)'
-
-    for m in re.finditer(
-        receipt_pattern,
-        text
-    ):
-        receipts.append(
-            (
-                m.group(1),
-                float(m.group(2))
-            )
-        )
-
-    if receipts:
-        emi_amount = receipts[0][1]
-
-    for date, amt in receipts:
-
-        if emi_amount:
-
-            if amt < emi_amount:
-                partials.append(
-                    f"{date} ₹{amt:,.0f}"
-                )
-
-            if amt >= (emi_amount * 2):
-                bulk_payments.append(
-                    f"{date} ₹{amt:,.0f}"
-                )
-
-    lines = text.split("\n")
-
-    for i, line in enumerate(lines):
+    for line in text.split("\n"):
 
         if (
             "Bounced Return" in line
             or "Bounce" in line
+            or "insufficient fund" in line.lower()
         ):
+            bounce_lines.append(line)
 
-            date_match = re.search(
-                r'(\d{2}-[A-Za-z]{3}-\d{2})',
-                line
-            )
+    bounce_count = len(bounce_lines)
 
-            amount_match = re.search(
-                r'(\d+\.\d+)',
-                line
-            )
+    # Behaviour
 
-            bounce_date = (
-                date_match.group(1)
-                if date_match else ""
-            )
+    if bounce_count == 0 and overdue == 0:
+        behaviour = "Regular"
 
-            bounce_amt = (
-                amount_match.group(1)
-                if amount_match else ""
-            )
+    elif bounce_count > 0 and overdue == 0:
+        behaviour = "Average"
 
-            bounces.append(
-                (
-                    bounce_date,
-                    bounce_amt,
-                    "Insufficient Funds"
-                )
-            )
+    else:
+        behaviour = "Irregular"
 
-    if current_overdue > 0:
+    # DPD Status
+
+    if overdue > 0:
 
         dpd_status = (
             "customer has not cleared the delinquency and overdue is still outstanding"
@@ -137,82 +116,43 @@ if pdf_file and excel_file:
             "customer has cleared the delinquency and account is presently regular"
         )
 
-    if len(bounces) == 0 and current_overdue == 0:
+    # Reason
 
-        behaviour = "Regular"
-
-    elif len(bounces) <= 2 and current_overdue == 0:
-
-        behaviour = "Average"
-
-    else:
-
-        behaviour = "Irregular"
-
-    if len(bounces) > 0:
-
+    if bounce_count > 0:
         reason = (
             "insufficient funds and irregular cash flow"
         )
 
-    elif current_overdue > 0:
-
+    elif overdue > 0:
         reason = (
-            "customer has not regularized overdue obligations"
+            "non regularization of overdue obligations"
         )
 
     else:
-
         reason = (
             "no delinquency observed"
         )
 
-    credit_summary = (
-        f"EMI of ₹{emi_amount:,.0f} received on "
-        + ", ".join(
-            [x[0] for x in receipts]
-        )
-        if emi_amount
-        else "payments observed"
-    )
+    # Final Observation
 
-    partial_summary = (
-        ", ".join(partials)
-        if partials
-        else "no partial payment observed"
-    )
+    observation = f"""
+Customer Name : {customer_name}
 
-    bulk_summary = (
-        ", ".join(bulk_payments)
-        if bulk_payments
-        else "no bulk payment observed"
-    )
+Loan Number : {loan_no}
 
-    bounce_summary = (
-        "; ".join(
-            [
-                f"{d} for ₹{float(a):,.0f} due to {r}"
-                for d, a, r in bounces
-                if a
-            ]
-        )
-        if bounces
-        else "no bounce observed"
-    )
+Max DPD : {max_dpd}
 
-    final_observation = f"""
-Customer credited {credit_summary}; {partial_summary}; {bulk_summary}; bounce observed on {bounce_summary}; current overdue amount ₹{current_overdue:,.0f}; Max DPD observed {max_dpd} days; {dpd_status}; probable reason for delinquency appears {reason}; repayment behaviour {behaviour}.
+Current Overdue : ₹{overdue}
+
+Final Observation:
+
+Customer account reviewed from SOA and DPD records; total bounce instances observed {bounce_count}; current overdue amount ₹{overdue}; Max DPD observed {max_dpd} days; {dpd_status}; probable reason for delinquency appears {reason}; repayment behaviour {behaviour}.
 """
 
     st.subheader("Analysis")
 
-    st.write("Customer Name:", customer_name)
-    st.write("LAN:", lan)
-    st.write("Max DPD:", max_dpd)
-    st.write("Current Overdue:", current_overdue)
-
     st.text_area(
-        "Final Observation",
-        final_observation,
-        height=250
+        "Result",
+        observation,
+        height=300
     )
