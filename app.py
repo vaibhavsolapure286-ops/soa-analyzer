@@ -1,7 +1,3 @@
-# ------------------------------
-# EMI DELAY ANALYSIS
-# ------------------------------
-
 from datetime import datetime
 
 EMI_DUE_DAY = 8
