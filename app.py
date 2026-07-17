@@ -1,129 +1,59 @@
-import streamlit as st
-import pdfplumber
-import re
+prompt = f"""
+Review this Statement of Account (SOA).
 
-st.title("SOA Analyzer")
+Provide only the following:
 
-pdf_file = st.file_uploader(
-    "Upload SOA PDF",
-    type=["pdf"]
-)
+1. EMI Amount.
 
-if pdf_file:
+2. Total Bounce Count.
 
-    text = ""
+3. For each bounce:
+   - Bounce Date
+   - Bounce Amount
+   - Bounce Reason
+   - Was bounce recovered? (Yes/No)
+   - Recovery Date
+   - Recovery Amount
+   - Was recovery done in same month or next month?
+   - DPD Days = Recovery Date - Bounce Date
 
-    with pdfplumber.open(pdf_file) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
+4. If bounce is not recovered:
+   - Pending Amount
+   - Current DPD Days = Today - Bounce Date
 
-            if page_text:
-                text += page_text + "\n"
+5. Identify any partial payment:
+   - Date
+   - Amount
+   - Pending Balance
 
-    # ------------------------------
-    # CUSTOMER NAME
-    # ------------------------------
+6. Mention:
+   - Cleared Bounce Count
+   - Pending Bounce Count
 
-    customer_name = "Not Found"
+7. Final Observation in one sentence.
 
-    customer_match = re.search(
-        r'Ledger:\s*Mr[s]?\.\s*([^\n]+)',
-        text
-    )
+Output Format:
 
-    if customer_match:
-        customer_name = (
-            customer_match.group(1)
-            .split("-")[0]
-            .strip()
-        )
+Bounce Review:
 
-    # ------------------------------
-    # EMI RECEIPTS
-    # ------------------------------
+Bounce Date:
+Bounce Amount:
+Recovery Date:
+Recovery Amount:
+Recovered In:
+DPD Days:
 
-    receipt_count = text.lower().count("receipt")
+Partial Payment Review:
 
-    # ------------------------------
-    # BOUNCES
-    # ------------------------------
+Cleared Bounce Count:
 
-    bounce_count = (
-        text.lower().count("bounced return")
-    )
-
-    # ------------------------------
-    # BOUNCE CHARGES
-    # ------------------------------
-
-    bounce_charge_count = (
-        text.lower().count("emi bouncing charges")
-    )
-
-    # ------------------------------
-    # PARTIAL PAYMENT
-    # ------------------------------
-
-    partial_payment_count = 0
-
-    if "Pending" in text:
-        partial_payment_count += 1
-
-    # ------------------------------
-    # CURRENT POS
-    # ------------------------------
-
-    pos_match = re.findall(
-        r'(\d+\.\d+)\s*Dr',
-        text
-    )
-
-    current_pos = "Not Found"
-
-    if pos_match:
-        current_pos = pos_match[-1]
-
-    # ------------------------------
-    # OVERDUE
-    # ------------------------------
-
-    current_overdue = "Check Bounce Recovery"
-
-    # ------------------------------
-    # FINAL OBSERVATION
-    # ------------------------------
-
-    observation = f"""
-Customer Name: {customer_name}
-
-EMI Payments Observed: {receipt_count}
-
-Bounce Count: {bounce_count}
-
-Bounce Charge Entries: {bounce_charge_count}
-
-Partial Payment Count: {partial_payment_count}
-
-Current POS: ₹{current_pos}
-
-Current Overdue: {current_overdue}
+Pending Bounce Count:
 
 Final Observation:
 
-Customer repayment behaviour reviewed as per available SOA; EMI payment entries observed are {receipt_count}; total bounce count observed is {bounce_count}; bounce charge entries observed are {bounce_charge_count}; partial payment count observed is {partial_payment_count}; current POS is ₹{current_pos}; current overdue requires verification against bounce recovery entries; overall repayment behaviour should be assessed based on bounce regularisation, overdue clearance status and payment continuity.
+Customer paid EMI of ₹X; total bounce count observed is X; bounce dated DD-MMM-YYYY for ₹X was recovered on DD-MMM-YYYY in same month/next month with DPD of X days; partial payment of ₹X observed on DD-MMM-YYYY; cleared bounce count is X and pending bounce count is X; overall repayment behaviour is Regular/Average/Irregular.
+
+SOA DATA:
+
+{text}
 """
-
-    st.text_area(
-        "SOA Analysis",
-        observation,
-        height=400
-    )
-
-    st.download_button(
-        "Download Observation",
-        observation,
-        file_name="soa_observation.txt"
-    )
-
-
-shortfall_summary = (2    "\n".join(shortfall_analysis)3    if shortfall_analysis4    else "No Shortfall Observed"5)6 7# Format debit > credit months with recovery info8debit_more_summary = ""
