@@ -122,5 +122,5 @@ Customer repayment behaviour reviewed as per available SOA; EMI payment entries 
     st.download_button(
         "Download Observation",
         observation,
-        file_name="soa_observation.txt"
+        file_name=" "
     )
