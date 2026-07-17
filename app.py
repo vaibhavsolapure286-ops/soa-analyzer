@@ -3,7 +3,6 @@ prompt = f"""
 {text}
 ...
 """
-
 Review the Statement of Account (SOA) and provide repayment observations.
 
 1. Verify whether EMI payments were paid regularly and on time.
