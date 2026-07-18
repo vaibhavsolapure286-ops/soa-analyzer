@@ -159,4 +159,21 @@ def calculate_profile(emi_schedule):
         remark = (
             f"Outstanding liability of ₹{total_outstanding:,.0f} "
             f"remains unpaid. "
-            f"
+            f"Maximum DPD observed is {max_dpd} days. "
+            f"Repayment behaviour indicates stress."
+        )
+remar=(
+    f"{pending_emi_count} EMI(s) remain overdue. "
+    f"Outstanding liability of ₹{total_outstanding:,.0f} is pending. "
+    f"Profile reflects elevated credit risk."
+)
+summary = {
+    "total_due": total_due,
+    "total_paid": total_paid,
+    "total_outstanding": total_outstanding,
+    "pending_emi_count": pending_emi_count,
+    "max_dpd": max_dpd,
+    "profile": profile,
+    "remark": remark
+}
+return emi_results, summary
