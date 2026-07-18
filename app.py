@@ -1,258 +1,162 @@
-import streamlit as st
-import pdfplumber
-import re
 from datetime import datetime
 
-st.set_page_config(page_title="SOA Credit Assessment Tool")
+def calculate_profile(emi_schedule):
+    """
+    emi_schedule format:
 
-st.title("SOA Credit Assessment Tool")
+    [
+        {
+            "due_date": "2025-01-08",
+            "emi_amount": 15790,
+            "payments": [
+                {"date": "2025-01-08", "amount": 8000},
+                {"date": "2025-01-20", "amount": 7790}
+            ]
+        }
+    ]
+    """
 
-uploaded_file = st.file_uploader(
-    "Upload SOA PDF",
-    type=["pdf"]
-)
+    total_due = 0
+    total_paid = 0
+    total_outstanding = 0
 
-if uploaded_file:
+    pending_emi_count = 0
 
-    text = ""
+    max_dpd = 0
 
-    with pdfplumber.open(uploaded_file) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
+    emi_results = []
 
-            if page_text:
-                text += page_text + "\n"
+    for emi in emi_schedule:
 
-    # ==========================
-    # CUSTOMER NAME
-    # ==========================
-
-    customer = "Not Found"
-
-    m = re.search(
-        r"Mr\.\s+([A-Za-z\s]+)-\d+",
-        text
-    )
-
-    if m:
-        customer = m.group(1).strip()
-
-    # ==========================
-    # EMI AMOUNT
-    # ==========================
-
-    emi_amount = 0
-
-    emi_match = re.findall(
-        r"EMI.*?(\d{4,6}\.?\d*)",
-        text,
-        re.IGNORECASE
-    )
-
-    if emi_match:
-        try:
-            emi_amount = float(emi_match[0])
-        except:
-            emi_amount = 0
-
-    # ==========================
-    # BOUNCE DETECTION
-    # ==========================
-
-    bounce_found = False
-    bounce_date = ""
-    bounce_amount = 0
-
-    bounce_pattern = re.search(
-        r"(\d{2}-[A-Za-z]{3}-\d{2}).*?Bounced Return.*?(\d{4,6}\.?\d*)",
-        text,
-        re.IGNORECASE | re.DOTALL
-    )
-
-    if bounce_pattern:
-        bounce_found = True
-
-        bounce_date = bounce_pattern.group(1)
-
-        try:
-            bounce_amount = float(
-                bounce_pattern.group(2)
-            )
-        except:
-            bounce_amount = emi_amount
-
-    # ==========================
-    # BOUNCE CHARGES
-    # ==========================
-
-    bounce_charges = 0
-
-    charge_match = re.search(
-        r"EMI Bouncing Charges.*?(\d+\.\d+)",
-        text,
-        re.IGNORECASE | re.DOTALL
-    )
-
-    if charge_match:
-        try:
-            bounce_charges = float(
-                charge_match.group(1)
-            )
-        except:
-            pass
-
-    # ==========================
-    # RECOVERY DETECTION
-    # ==========================
-
-    recovery_found = False
-    recovery_date = ""
-
-    if bounce_found:
-
-        receipt_dates = re.findall(
-            r"(\d{2}-[A-Za-z]{3}-\d{2}).*?Receipt.*?15790",
-            text,
-            re.IGNORECASE | re.DOTALL
+        due_date = datetime.strptime(
+            emi["due_date"],
+            "%Y-%m-%d"
         )
 
-        if receipt_dates:
+        emi_amount = emi["emi_amount"]
 
-            for d in receipt_dates:
+        total_due += emi_amount
 
-                if d != bounce_date:
-                    recovery_found = True
-                    recovery_date = d
-                    break
+        paid_total = sum(
+            p["amount"]
+            for p in emi["payments"]
+        )
 
-    # ==========================
-    # DELAY DAYS
-    # ==========================
+        total_paid += paid_total
 
-    delay_days = 0
+        outstanding = max(
+            0,
+            emi_amount - paid_total
+        )
 
-    if bounce_found and recovery_found:
+        total_outstanding += outstanding
 
-        try:
-            d1 = datetime.strptime(
-                bounce_date,
-                "%d-%b-%y"
-            )
+        status = "Paid On Time"
 
-            d2 = datetime.strptime(
-                recovery_date,
-                "%d-%b-%y"
-            )
+        dpd = 0
 
-            delay_days = (
-                d2 - d1
+        final_payment_date = None
+
+        running_total = 0
+
+        sorted_payments = sorted(
+            emi["payments"],
+            key=lambda x: x["date"]
+        )
+
+        for p in sorted_payments:
+
+            running_total += p["amount"]
+
+            if running_total >= emi_amount:
+
+                final_payment_date = datetime.strptime(
+                    p["date"],
+                    "%Y-%m-%d"
+                )
+
+                break
+
+        if outstanding > 0:
+
+            status = "Unpaid"
+
+            pending_emi_count += 1
+
+            dpd = (
+                datetime.today() - due_date
             ).days
 
-        except:
-            pass
+        else:
 
-    # ==========================
-    # OUTSTANDING
-    # ==========================
+            dpd = max(
+                0,
+                (final_payment_date - due_date).days
+            )
 
-    outstanding_amount = 0
+            if dpd > 0:
 
-    if bounce_found and not recovery_found:
-        outstanding_amount = bounce_amount
+                if paid_total < emi_amount:
+                    status = "Partial"
 
-    # ==========================
-    # ASSESSMENT
-    # ==========================
+                else:
+                    status = "Delayed"
 
-    assessment = "Positive"
+        max_dpd = max(
+            max_dpd,
+            dpd
+        )
 
-    if bounce_found and recovery_found:
-        assessment = "Mild Negative"
+        emi_results.append({
+            "due_date": emi["due_date"],
+            "emi_amount": emi_amount,
+            "paid_amount": paid_total,
+            "outstanding": outstanding,
+            "dpd": dpd,
+            "status": status
+        })
 
-    elif bounce_found and not recovery_found:
-        assessment = "Negative"
+    # ===================
+    # PROFILE LOGIC
+    # ===================
 
-    # ==========================
+    profile = "Positive"
+
+    if pending_emi_count >= 2:
+        profile = "High Risk"
+
+    elif total_outstanding > 0:
+        profile = "Negative"
+
+    elif max_dpd > 30:
+        profile = "Negative"
+
+    elif max_dpd > 5:
+        profile = "Mild Negative"
+
+    # ===================
     # REMARK
-    # ==========================
+    # ===================
 
-    if assessment == "Positive":
-
-        remark = (
-            "Regular repayment behaviour observed. "
-            "No bounce, overdue liability or carry-forward amount detected."
-        )
-
-    elif assessment == "Mild Negative":
+    if profile == "Positive":
 
         remark = (
-            f"EMI bounce observed on {bounce_date}. "
-            f"Recovered on {recovery_date}. "
-            f"Delay of {delay_days} day(s) noted. "
-            "Repayment behaviour indicates temporary stress but subsequent recovery was observed."
+            "EMIs have been serviced regularly. "
+            "No outstanding liability observed. "
+            "Repayment behaviour appears satisfactory."
         )
 
-    else:
+    elif profile == "Mild Negative":
 
         remark = (
-            f"Bounced EMI of ₹{bounce_amount:,.0f} remains unpaid. "
-            "No corresponding recovery transaction identified. "
-            "Liability appears carried forward and repayment stress is evident."
+            f"Occasional delays observed. "
+            f"Maximum DPD recorded is {max_dpd} days. "
+            f"All dues appear regularized."
         )
 
-    # ==========================
-    # DISPLAY
-    # ==========================
+    elif profile == "Negative":
 
-    st.header("SOA Assessment")
-
-    st.write("### Customer Name")
-    st.write(customer)
-
-    st.write("### EMI Amount")
-    st.write(
-        f"₹{emi_amount:,.0f}"
-        if emi_amount
-        else "Not Detected"
-    )
-
-    st.write("### Bounce Found")
-    st.write("Yes" if bounce_found else "No")
-
-    st.write("### Bounce Date")
-    st.write(bounce_date or "NA")
-
-    st.write("### Recovery Date")
-    st.write(recovery_date or "Not Found")
-
-    st.write("### Delay Days")
-    st.write(delay_days)
-
-    st.write("### Outstanding Amount")
-    st.write(
-        f"₹{outstanding_amount:,.0f}"
-    )
-
-    st.write("### Bounce Charges")
-    st.write(
-        f"₹{bounce_charges:,.0f}"
-        if bounce_charges
-        else "NA"
-    )
-
-    st.write("### Carry Forward")
-    st.write(
-        "Yes"
-        if outstanding_amount > 0
-        else "No"
-    )
-
-    st.write("### Assessment")
-    st.success(assessment)
-
-    st.write("### Remark")
-    st.text_area(
-        "",
-        remark,
-        height=150
-    )
+        remark = (
+            f"Outstanding liability of ₹{total_outstanding:,.0f} "
+            f"remains unpaid. "
+            f"
