@@ -1,27 +1,17 @@
+import streamlit as st
 from datetime import datetime
 
-def calculate_profile(emi_schedule):
-    """
-    emi_schedule format:
+st.set_page_config(page_title="SOA Underwriting Analyzer")
 
-    [
-        {
-            "due_date": "2025-01-08",
-            "emi_amount": 15790,
-            "payments": [
-                {"date": "2025-01-08", "amount": 8000},
-                {"date": "2025-01-20", "amount": 7790}
-            ]
-        }
-    ]
-    """
+st.title("SOA Underwriting Analyzer")
+
+def calculate_profile(emi_schedule):
 
     total_due = 0
     total_paid = 0
     total_outstanding = 0
 
     pending_emi_count = 0
-
     max_dpd = 0
 
     emi_results = []
@@ -95,12 +85,7 @@ def calculate_profile(emi_schedule):
             )
 
             if dpd > 0:
-
-                if paid_total < emi_amount:
-                    status = "Partial"
-
-                else:
-                    status = "Delayed"
+                status = "Delayed"
 
         max_dpd = max(
             max_dpd,
@@ -116,10 +101,6 @@ def calculate_profile(emi_schedule):
             "status": status
         })
 
-    # ===================
-    # PROFILE LOGIC
-    # ===================
-
     profile = "Positive"
 
     if pending_emi_count >= 2:
@@ -134,46 +115,69 @@ def calculate_profile(emi_schedule):
     elif max_dpd > 5:
         profile = "Mild Negative"
 
-    # ===================
-    # REMARK
-    # ===================
-
     if profile == "Positive":
 
         remark = (
-            "EMIs have been serviced regularly. "
-            "No outstanding liability observed. "
-            "Repayment behaviour appears satisfactory."
+            "EMIs serviced regularly. "
+            "No outstanding liability observed."
         )
 
     elif profile == "Mild Negative":
 
         remark = (
-            f"Occasional delays observed. "
-            f"Maximum DPD recorded is {max_dpd} days. "
-            f"All dues appear regularized."
+            f"Maximum DPD observed is {max_dpd} days. "
+            "All dues appear regularized."
         )
 
     elif profile == "Negative":
 
         remark = (
-            f"Outstanding liability of ₹{total_outstanding:,.0f} "
-            f"remains unpaid. "
-            f"Maximum DPD observed is {max_dpd} days. "
-            f"Repayment behaviour indicates stress."
+            f"Outstanding liability of ₹{total_outstanding:,.0f} remains unpaid. "
+            f"Maximum DPD observed is {max_dpd} days."
         )
-remar=(
-    f"{pending_emi_count} EMI(s) remain overdue. "
-    f"Outstanding liability of ₹{total_outstanding:,.0f} is pending. "
-    f"Profile reflects elevated credit risk."
-)
-summary = {
-    "total_due": total_due,
-    "total_paid": total_paid,
-    "total_outstanding": total_outstanding,
-    "pending_emi_count": pending_emi_count,
-    "max_dpd": max_dpd,
-    "profile": profile,
-    "remark": remark
-}
-return emi_results, summary
+
+    else:
+
+        remark = (
+            f"{pending_emi_count} EMI(s) remain overdue. "
+            f"Outstanding liability of ₹{total_outstanding:,.0f} is pending."
+        )
+
+    summary = {
+        "Total EMI Due": total_due,
+        "Total EMI Paid": total_paid,
+        "Outstanding Amount": total_outstanding,
+        "Pending EMI Count": pending_emi_count,
+        "Maximum DPD": max_dpd,
+        "Profile": profile,
+        "Remark": remark
+    }
+
+    return emi_results, summary
+
+
+sample_data = [
+    {
+        "due_date": "2025-01-08",
+        "emi_amount": 15790,
+        "payments": [
+            {
+                "date": "2025-01-20",
+                "amount": 15790
+            }
+        ]
+    }
+]
+
+if st.button("Run Sample Analysis"):
+
+    results, summary = calculate_profile(sample_data)
+
+    st.subheader("Summary")
+
+    for k, v in summary.items():
+        st.write(f"{k}: {v}")
+
+    st.subheader("EMI Details")
+
+    st.json(results)
