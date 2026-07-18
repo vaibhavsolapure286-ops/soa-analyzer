@@ -1,183 +1,155 @@
 import streamlit as st
-from datetime import datetime
+import pdfplumber
+import re
 
-st.set_page_config(page_title="SOA Underwriting Analyzer")
+st.set_page_config(
+    page_title="SOA Underwriting Analyzer",
+    layout="wide"
+)
 
 st.title("SOA Underwriting Analyzer")
 
-def calculate_profile(emi_schedule):
+uploaded_file = st.file_uploader(
+    "Upload SOA PDF",
+    type=["pdf"]
+)
 
-    total_due = 0
-    total_paid = 0
-    total_outstanding = 0
+if uploaded_file:
 
-    pending_emi_count = 0
-    max_dpd = 0
+    text = ""
 
-    emi_results = []
+    try:
 
-    for emi in emi_schedule:
+        with pdfplumber.open(uploaded_file) as pdf:
 
-        due_date = datetime.strptime(
-            emi["due_date"],
-            "%Y-%m-%d"
+            for page in pdf.pages:
+
+                page_text = page.extract_text()
+
+                if page_text:
+                    text += page_text + "\n"
+
+        customer = "Not Found"
+
+        match = re.search(
+            r"Mr\.\s+([A-Za-z\s]+)-\d+",
+            text
         )
 
-        emi_amount = emi["emi_amount"]
+        if match:
+            customer = match.group(1).strip()
 
-        total_due += emi_amount
+        emi_amount = 0
 
-        paid_total = sum(
-            p["amount"]
-            for p in emi["payments"]
+        emi_match = re.findall(
+            r"EMI.*?(\d{4,6}\.?\d*)",
+            text,
+            flags=re.IGNORECASE
         )
 
-        total_paid += paid_total
+        if emi_match:
 
-        outstanding = max(
-            0,
-            emi_amount - paid_total
-        )
-
-        total_outstanding += outstanding
-
-        status = "Paid On Time"
-
-        dpd = 0
-
-        final_payment_date = None
-
-        running_total = 0
-
-        sorted_payments = sorted(
-            emi["payments"],
-            key=lambda x: x["date"]
-        )
-
-        for p in sorted_payments:
-
-            running_total += p["amount"]
-
-            if running_total >= emi_amount:
-
-                final_payment_date = datetime.strptime(
-                    p["date"],
-                    "%Y-%m-%d"
+            try:
+                emi_amount = float(
+                    emi_match[0]
                 )
 
-                break
+            except:
+                pass
 
-        if outstanding > 0:
+        bounce_found = False
+        bounce_date = ""
 
-            status = "Unpaid"
+        if "Bounced Return" in text:
 
-            pending_emi_count += 1
+            bounce_found = True
 
-            dpd = (
-                datetime.today() - due_date
-            ).days
+            date_match = re.search(
+                r"(\d{2}-[A-Za-z]{3}-\d{2}).*?Bounced Return",
+                text,
+                re.IGNORECASE | re.DOTALL
+            )
+
+            if date_match:
+                bounce_date = date_match.group(1)
+
+        bounce_charges = 0
+
+        charge_match = re.search(
+            r"EMI Bouncing Charges.*?(\d+\.\d+)",
+            text,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+
+        if charge_match:
+
+            try:
+                bounce_charges = float(
+                    charge_match.group(1)
+                )
+            except:
+                pass
+
+        if bounce_found:
+
+            assessment = "Mild Negative"
+
+            remark = (
+                "EMI bounce observed. "
+                "Customer repayment behaviour shows temporary stress. "
+                "Recommend checking whether EMI was subsequently recovered."
+            )
 
         else:
 
-            dpd = max(
-                0,
-                (final_payment_date - due_date).days
+            assessment = "Positive"
+
+            remark = (
+                "Regular EMI repayment behaviour observed. "
+                "No bounce transaction detected."
             )
 
-            if dpd > 0:
-                status = "Delayed"
+        st.header("SOA Analysis")
 
-        max_dpd = max(
-            max_dpd,
-            dpd
+        st.write("### Customer Name")
+        st.write(customer)
+
+        st.write("### EMI Amount")
+        if emi_amount:
+            st.write(f"₹{emi_amount:,.0f}")
+        else:
+            st.write("Not Detected")
+
+        st.write("### Bounce Found")
+        st.write("Yes" if bounce_found else "No")
+
+        st.write("### Bounce Date")
+        st.write(bounce_date if bounce_date else "NA")
+
+        st.write("### Bounce Charges")
+        if bounce_charges:
+            st.write(f"₹{bounce_charges:,.0f}")
+        else:
+            st.write("NA")
+
+        st.write("### Assessment")
+        st.success(assessment)
+
+        st.write("### Underwriting Remark")
+        st.text_area(
+            "",
+            remark,
+            height=120
         )
 
-        emi_results.append({
-            "due_date": emi["due_date"],
-            "emi_amount": emi_amount,
-            "paid_amount": paid_total,
-            "outstanding": outstanding,
-            "dpd": dpd,
-            "status": status
-        })
+        with st.expander("View Extracted Text"):
 
-    profile = "Positive"
+            st.text_area(
+                "SOA Data",
+                text[:10000],
+                height=400
+            )
 
-    if pending_emi_count >= 2:
-        profile = "High Risk"
+    except Exception as e:
 
-    elif total_outstanding > 0:
-        profile = "Negative"
-
-    elif max_dpd > 30:
-        profile = "Negative"
-
-    elif max_dpd > 5:
-        profile = "Mild Negative"
-
-    if profile == "Positive":
-
-        remark = (
-            "EMIs serviced regularly. "
-            "No outstanding liability observed."
-        )
-
-    elif profile == "Mild Negative":
-
-        remark = (
-            f"Maximum DPD observed is {max_dpd} days. "
-            "All dues appear regularized."
-        )
-
-    elif profile == "Negative":
-
-        remark = (
-            f"Outstanding liability of ₹{total_outstanding:,.0f} remains unpaid. "
-            f"Maximum DPD observed is {max_dpd} days."
-        )
-
-    else:
-
-        remark = (
-            f"{pending_emi_count} EMI(s) remain overdue. "
-            f"Outstanding liability of ₹{total_outstanding:,.0f} is pending."
-        )
-
-    summary = {
-        "Total EMI Due": total_due,
-        "Total EMI Paid": total_paid,
-        "Outstanding Amount": total_outstanding,
-        "Pending EMI Count": pending_emi_count,
-        "Maximum DPD": max_dpd,
-        "Profile": profile,
-        "Remark": remark
-    }
-
-    return emi_results, summary
-
-
-sample_data = [
-    {
-        "due_date": "2025-01-08",
-        "emi_amount": 15790,
-        "payments": [
-            {
-                "date": "2025-01-20",
-                "amount": 15790
-            }
-        ]
-    }
-]
-
-if st.button("Run Sample Analysis"):
-
-    results, summary = calculate_profile(sample_data)
-
-    st.subheader("Summary")
-
-    for k, v in summary.items():
-        st.write(f"{k}: {v}")
-
-    st.subheader("EMI Details")
-
-    st.json(results)
+        st.error(str(e))
